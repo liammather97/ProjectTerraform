@@ -1,0 +1,161 @@
+version: '3.7'
+
+networks: 
+  qa-portal:
+    name: qa-portal
+    attachable: true 
+
+services:
+  keycloak:
+    image: jboss/keycloak:latest
+    environment:
+      - KEYCLOAK_USER=admin
+      - KEYCLOAK_PASSWORD=admin
+      - KEYCLOAK_IMPORT=/tmp/realm.json
+      - DB_DATABASE=qa-portal
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - PROXY_ADDRESS_FORWARDING=true
+      - DB_ADDR=postgres:5432
+    volumes:
+      - type: bind
+        source: ./qa-portal-infra/keycloak/exported_realms/qa-portal-realm.json
+        target: /tmp/realm.json
+    depends_on:
+      - postgres
+    ports:
+      - target: 8080
+        published: 8080
+    networks:
+      - qa-portal
+
+  postgres:
+    image: postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=qa-portal
+    networks:
+      - qa-portal
+
+  mongo:
+    image: mongo:latest
+    environment:
+      - MONGO_INITDB_DATABASE=qa-portal-cv
+      - MONGO_INITDB_USERNAME=mongo
+      - MONGO_INITDB_PASSWORD=mongo
+    depends_on: 
+      - postgres
+    networks:
+      - qa-portal
+
+  portal-core:
+    image: portal-core:latest
+    depends_on:
+      - keycloak
+      - cohort-api
+      - cv-api
+      - self-reflection-api
+      - portal-application-api
+      - form-api
+      - feedback-api
+      - postgres
+    build: ./qa-portal-angular
+    volumes:
+      - type: bind
+        source: ./qa-portal-angular/nginx.conf
+        target: /etc/nginx/nginx.conf
+    ports:
+      - target: 80
+        published: 80
+    networks:
+      - qa-portal
+
+  cohort-api:
+    image: cohort-api:latest
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=cohort-api
+    depends_on:
+      - postgres
+    networks:
+      - qa-portal
+    ports:
+      - target: 8086
+
+  cv-api:
+    image: cv-api:latest
+    environment:
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=cv-api
+    depends_on:
+      - postgres
+      - mongo
+    networks:
+      - qa-portal
+    ports:
+      - target: 8087
+
+  self-reflection-api:
+    image: self-reflection-api:latest
+    environment:
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=self-reflection-api
+    depends_on:
+      - postgres
+    networks:
+      - qa-portal
+    ports:
+      - target: 8082
+
+  portal-application-api:
+    image: portal-application-api:latest
+    environment:
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=portal-application-api
+    depends_on:
+      - postgres
+    networks:
+      - qa-portal
+    ports:
+      - target: 8081
+
+  feedback-api:
+    image: feedback-api:latest
+    environment:
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=feedback-api
+    depends_on:
+      - postgres
+    networks:
+      - qa-portal
+    ports:
+      - target: 8084
+
+  form-api:
+    image: form-api:latest
+    environment:
+      - JAVA_TOOL_OPTIONS=-Dfile.encoding=UTF8
+    build: 
+      context: ./qa-portal-services
+      args:
+        - PROJECT=form-api
+    depends_on:
+      - postgres
+    networks:
+      - qa-portal
+    ports:
+      - target: 8085
